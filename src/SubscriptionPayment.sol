@@ -13,25 +13,18 @@ contract SubscriptionPayment is Ownable2Step {
     address immutable usdt;
     address immutable wbtc;
 
-    AggregatorV3Interface internal priceFeedBNBUSD;
-    AggregatorV3Interface internal priceFeedETHUSD;
-    AggregatorV3Interface internal priceFeedWBTCUSD;
-
+    AggregatorV3Interface immutable priceFeedBNBUSD;
+    AggregatorV3Interface immutable priceFeedETHUSD;
+    AggregatorV3Interface immutable priceFeedWBTCUSD;
+ 
     uint256 public subscriptionFeeUSD;  // Subscription fee in USD
     uint256 public subscriptionPeriod;  // Subscription time period in days
-
-    // Counters to track balance
-    uint256 public balanceBNB;
-    uint256 public balanceETH;
-    uint256 public balanceUSDC;
-    uint256 public balanceUSDT;
-    uint256 public balanceWBTC;
 
     // Address of coldwallet
     address public coldWallet;
 
     // Mapping to store subscription info of user
-    mapping(address => Subscription) private userToSubscription;
+    mapping(address => Subscription) private userSubscription;
 
     struct Subscription{
         uint256 subscriptionStartsAt;
@@ -49,6 +42,8 @@ contract SubscriptionPayment is Ownable2Step {
     event ColdWalletUpdated(address indexed _coldWallet);
 
     constructor(
+        uint256 _subscriptionFeeUSD,
+        uint256 _subscriptionPeriod,
         address _owner, 
         address _coldWallet, 
         address _bnb, 
@@ -59,6 +54,8 @@ contract SubscriptionPayment is Ownable2Step {
         address _priceFeedETHUSD,
         address _priceFeedWBTCUSD
     ) Ownable(_owner) {
+        subscriptionFeeUSD = _subscriptionFeeUSD;
+        subscriptionPeriod = _subscriptionPeriod;
         coldWallet = _coldWallet;
         bnb = _bnb;
         usdc = _usdc;
@@ -96,53 +93,60 @@ contract SubscriptionPayment is Ownable2Step {
     }
 
     // @notice Funtion to pay for subscription
-    function paySubscription(address _token) external {
+    function startSubscriptionWithToken(address _token) external {
         uint256 amount;
         if(_token == bnb) {
             amount = getSubscriptionFee(bnb);
             IERC20(bnb).safeTransferFrom(msg.sender, address(this), amount);
-            balanceBNB = balanceBNB +  amount;
         } else if(_token == usdc) {
             amount = subscriptionFeeUSD * 10 ** 6;
             IERC20(usdc).safeTransferFrom(msg.sender, address(this), amount);
-            balanceUSDC = balanceUSDC +  subscriptionFeeUSD;
         } else if(_token == usdt) {
             amount = subscriptionFeeUSD * 10 ** 6;
             IERC20(usdt).safeTransferFrom(msg.sender, address(this), amount); 
-            balanceUSDT = balanceUSDT +  subscriptionFeeUSD;
         } else if(_token == wbtc) {
             amount = getSubscriptionFee(wbtc);
             IERC20(wbtc).safeTransferFrom(msg.sender, address(this), amount);
-            balanceWBTC = balanceWBTC +  amount;
         } else {
             revert InvalidToken();
         }
 
-        userToSubscription[msg.sender].subscriptionStartsAt = block.timestamp;
-        userToSubscription[msg.sender].subscriptionEndsAt = block.timestamp + (subscriptionPeriod * 1 days);
+        setSubscription(msg.sender);
 
         emit PaymentReceived(_token, msg.sender, amount);
     }
     
     // @notice Function to pay for subscription in ETH
-    function payWithETH() external payable {
-        require(msg.value > 0, "Amount must be greater than zero");
-        balanceETH = balanceETH + msg.value;
+    function startSubscriptionWithETH() external payable {
+        // 2%slippage
+        require(msg.value > (getSubscriptionFee(address(0))*92)/100 && msg.value < (getSubscriptionFee(address(0))*102)/100, "Ether sent along should be equal to subscription fee");
+        setSubscription(msg.sender);
 
         emit PaymentReceived(address(0), msg.sender, msg.value);
     }
 
+    function setSubscription(address _user) private {
+        if(userSubscription[_user].subscriptionStartsAt != 0) {
+            userSubscription[_user].subscriptionEndsAt = userSubscription[_user].subscriptionEndsAt + (subscriptionPeriod * 1 days);
+
+        } else {
+            userSubscription[_user].subscriptionStartsAt = block.timestamp;
+            userSubscription[_user].subscriptionEndsAt = block.timestamp + (subscriptionPeriod * 1 days);
+        }
+    }
+
     // @notice Function to check if a user has valid subscription
     function isSubscribed(address _user) public view returns (bool){
-        return block.timestamp < userToSubscription[_user].subscriptionEndsAt; 
+        return block.timestamp < userSubscription[_user].subscriptionEndsAt; 
     }
 
     // @notice Function to fetch subscription details of a user
     function getSubscriptionData(address _user) external view returns (Subscription memory){
         Subscription memory subscription = Subscription(
-            userToSubscription[_user].subscriptionStartsAt,
-            userToSubscription[_user].subscriptionEndsAt
+            userSubscription[_user].subscriptionStartsAt,
+            userSubscription[_user].subscriptionEndsAt
         );
+
         return subscription;
     }
 
