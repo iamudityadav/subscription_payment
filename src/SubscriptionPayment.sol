@@ -17,16 +17,20 @@ contract SubscriptionPayment is Ownable2Step {
     AggregatorV3Interface internal priceFeedETHUSD;
     AggregatorV3Interface internal priceFeedWBTCUSD;
 
-    uint256 public subscriptionFeeUSD;
-    uint256 public subscriptionPeriod;
+    uint256 public subscriptionFeeUSD;  // Subscription fee in USD
+    uint256 public subscriptionPeriod;  // Subscription time period in days
 
+    // Counters to track balance
     uint256 public balanceBNB;
     uint256 public balanceETH;
     uint256 public balanceUSDC;
     uint256 public balanceUSDT;
     uint256 public balanceWBTC;
+
+    // Address of coldwallet
     address public coldWallet;
 
+    // Mapping to store subscription info of user
     mapping(address => Subscription) private userToSubscription;
 
     struct Subscription{
@@ -34,8 +38,10 @@ contract SubscriptionPayment is Ownable2Step {
         uint256 subscriptionEndsAt;
     }
 
+    // Custom errors
     error InvalidToken();
 
+    // Events
     event PaymentReceived(address indexed _token, address indexed _subsciber, uint256 indexed _amount);
     event SubscriptionFeeUSDUpdated(string _mssg, uint256 indexed _subscriptionFeeUSD);
     event SubscriptionPeriodUpdated(string _mssg, uint256 indexed _subscriptionPeriod);
@@ -63,6 +69,7 @@ contract SubscriptionPayment is Ownable2Step {
         priceFeedWBTCUSD = AggregatorV3Interface(_priceFeedWBTCUSD);
     }
 
+    // @notice Function to fetch subscription fee
     function getSubscriptionFee(address _token) public view returns(uint256){
         uint256 subsFee;
         if(_token == wbtc) {
@@ -87,6 +94,7 @@ contract SubscriptionPayment is Ownable2Step {
         return subsFee;
     }
 
+    // @notice Funtion to pay for subscription
     function paySubscription(address _token) external {
         uint256 amount;
         if(_token == bnb) {
@@ -114,7 +122,8 @@ contract SubscriptionPayment is Ownable2Step {
 
         emit PaymentReceived(_token, msg.sender, amount);
     }
-
+    
+    // @notice Function to pay for subscription in ETH
     function payWithETH() external payable {
         require(msg.value > 0, "Amount must be greater than zero");
         balanceETH = balanceETH + msg.value;
@@ -122,10 +131,12 @@ contract SubscriptionPayment is Ownable2Step {
         emit PaymentReceived(address(0), msg.sender, msg.value);
     }
 
+    // @notice Function to check if a user has valid subscription
     function isSubscribed(address _user) public view returns (bool){
         return block.timestamp < userToSubscription[_user].subscriptionEndsAt; 
     }
 
+    // @notice Function to fetch subscription details of a user
     function getSubscriptionData(address _user) external view returns (Subscription memory){
         Subscription memory subscription = Subscription(
             userToSubscription[_user].subscriptionStartsAt,
@@ -134,18 +145,21 @@ contract SubscriptionPayment is Ownable2Step {
         return subscription;
     }
 
+    // @notice Function to update subscription fee
     function updateSubscriptionFeeUSD(uint256 _subscriptionFeeUSD) external onlyOwner{
         subscriptionFeeUSD = _subscriptionFeeUSD;
 
         emit SubscriptionFeeUSDUpdated("SubscriptionFeeUSD Updated", _subscriptionFeeUSD);
     }
 
+    // @notice Function to update subscription time period
     function updateSubscriptionPeriod(uint256 _subscriptionPeriod) external onlyOwner{
         subscriptionPeriod = _subscriptionPeriod;
         
        emit SubscriptionPeriodUpdated("Subscription Period Updated", _subscriptionPeriod);
     }
 
+    // @notice Function to update coldwallet
     function updateColdWallet(address _coldWallet) external onlyOwner {
         coldWallet = _coldWallet;
 
