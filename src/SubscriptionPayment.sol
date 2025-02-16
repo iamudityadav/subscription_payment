@@ -40,6 +40,7 @@ contract SubscriptionPayment is Ownable2Step {
 
     // Custom errors
     error InvalidToken();
+    error InsufficientBalance();
 
     // Events
     event PaymentReceived(address indexed _token, address indexed _subsciber, uint256 indexed _amount);
@@ -166,7 +167,23 @@ contract SubscriptionPayment is Ownable2Step {
         emit ColdWalletUpdated(_coldWallet);
     }
 
-    function withdraw() external onlyOwner {
-        
+    // @notice Function to withdraw funds
+    function withdraw(address _token) external onlyOwner {
+        uint256 balance;
+        if (_token == address(0)) {
+            balance = address(this).balance;
+            if(balance == 0) {
+                revert InsufficientBalance();
+            }
+            
+            payable(coldWallet).transfer(balance);
+        } else {
+            balance = IERC20(_token).balanceOf(address(this)); 
+            if(balance == 0) {
+                revert InsufficientBalance();
+            }
+
+            IERC20(_token).safeTransferFrom(address(this), coldWallet, balance);
+        }
     }
 }
