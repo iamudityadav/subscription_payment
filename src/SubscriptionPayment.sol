@@ -17,9 +17,12 @@ contract SubscriptionPayment is Ownable2Step {
     AggregatorV3Interface immutable priceFeedETHUSD;
     AggregatorV3Interface immutable priceFeedWBTCUSD;
  
-    uint256 public subscriptionFeeUSD;  // Subscription fee in USD
-    uint256 public subscriptionPeriod;  // Subscription time period in days
+    // Subscription fee in USD
+    uint256 public subscriptionFeeUSD;
 
+    // Subscription time period in days
+    uint256 public subscriptionPeriod;
+    
     // Address of coldwallet
     address public coldWallet;
 
@@ -32,13 +35,28 @@ contract SubscriptionPayment is Ownable2Step {
     }
 
     // Custom errors
+    error ColdWalletCannotBeZeroAddress();
     error InvalidToken();
     error InsufficientBalance();
 
-    // Events
+
+    // @notice This event is emitted when a payment is received for a subscription.
+    // @param _token Address of the token used for the payment. If the payment is made using native currency i.e. Ether 
+    // this will be the zero address (`address(0)`). For ERC-20 token payments, this will be the token address.
+    // @param _subscriber The address of the subscriber who made the payment.
+    // @param _amount The amount of the ETH/ERC-20 token paid by the subscriber. 
     event PaymentReceived(address indexed _token, address indexed _subsciber, uint256 indexed _amount);
-    event SubscriptionFeeUSDUpdated(string _mssg, uint256 indexed _subscriptionFeeUSD);
-    event SubscriptionPeriodUpdated(string _mssg, uint256 indexed _subscriptionPeriod);
+    
+    // @notice This event is emitted when the subscription fee in USD is updated.
+    // @param _subscriptionFeeUSD The new subscription fee in USD.
+    event SubscriptionFeeUSDUpdated(uint256 indexed _subscriptionFeeUSD);
+
+    // @notice This event is emitted when the subscription period is updated.
+    // @param _subscriptionPeriod The new subscription period in days.
+    event SubscriptionPeriodUpdated(uint256 indexed _subscriptionPeriod);
+    
+    // @notice This event is emitted when the cold wallet address is updated.
+    // @param _coldWallet The new address of the cold wallet.
     event ColdWalletUpdated(address indexed _coldWallet);
 
     constructor(
@@ -67,7 +85,9 @@ contract SubscriptionPayment is Ownable2Step {
         priceFeedWBTCUSD = AggregatorV3Interface(_priceFeedWBTCUSD);
     }
 
-    // @notice Function to fetch subscription fee
+    // @notice Function to fetch subscription fee.
+    // @param _token Address of the token for subscription fee is to be fetched.
+    // @return Subscription fee in '_token'.
     function getSubscriptionFee(address _token) public view returns(uint256){
         uint256 subsFee;
         if(_token == wbtc) {
@@ -92,7 +112,8 @@ contract SubscriptionPayment is Ownable2Step {
         return subsFee;
     }
 
-    // @notice Funtion to pay for subscription
+    // @notice Funtion to pay for subscription in BNB, USDC, USDT and WBTC.
+    // @param _token Address of the token the user wants to use to pay for the subscription.
     function startSubscriptionWithToken(address _token) external {
         uint256 amount;
         if(_token == bnb) {
@@ -116,15 +137,19 @@ contract SubscriptionPayment is Ownable2Step {
         emit PaymentReceived(_token, msg.sender, amount);
     }
     
-    // @notice Function to pay for subscription in ETH
+    // @notice Function to pay for subscription in ETH.
+    // @dev The function checks that the amount of ETH sent is within a 2% slippage tolerance of the subscription fee.
+    // If the ETH sent is outside this range, the transaction will revert
     function startSubscriptionWithETH() external payable {
-        // 2%slippage
+        // 2% slippage
         require(msg.value > (getSubscriptionFee(address(0))*92)/100 && msg.value < (getSubscriptionFee(address(0))*102)/100, "Ether sent along should be equal to subscription fee");
         setSubscription(msg.sender);
 
         emit PaymentReceived(address(0), msg.sender, msg.value);
     }
 
+    // @notice Function to update the subscription of a specific user.
+    // @param _user Address of the user for whom the subscription is being updated. 
     function setSubscription(address _user) private {
         if(userSubscription[_user].subscriptionStartsAt != 0) {
             userSubscription[_user].subscriptionEndsAt = userSubscription[_user].subscriptionEndsAt + (subscriptionPeriod * 1 days);
@@ -135,13 +160,17 @@ contract SubscriptionPayment is Ownable2Step {
         }
     }
 
-    // @notice Function to check if a user has valid subscription
+    // @notice Function to check if a user has valid subscription.
+    // @param _user Address of the user whose subscription status is being checked.
+    // @return bool Boolean value indicating the user's subscription status.
     function isSubscribed(address _user) public view returns (bool){
         return block.timestamp < userSubscription[_user].subscriptionEndsAt; 
     }
 
-    // @notice Function to fetch subscription details of a user
-    function getSubscriptionData(address _user) external view returns (Subscription memory){
+    // @notice Function to fetch subscription details of a user.
+    // @param _user Address of the user whose subscription details is being fetched.
+    // @return Subscription Returns a `Subscription` struct containing the user's subscription details.
+    function getSubscriptionData(address _user) external view returns (Subscription memory) {
         Subscription memory subscription = Subscription(
             userSubscription[_user].subscriptionStartsAt,
             userSubscription[_user].subscriptionEndsAt
@@ -150,28 +179,38 @@ contract SubscriptionPayment is Ownable2Step {
         return subscription;
     }
 
-    // @notice Function to update subscription fee
+    // @notice Function to update subscription fee.
+    // @param _subscriptionFeeUSD The new subscription fee in USD.
     function updateSubscriptionFeeUSD(uint256 _subscriptionFeeUSD) external onlyOwner{
         subscriptionFeeUSD = _subscriptionFeeUSD;
 
-        emit SubscriptionFeeUSDUpdated("SubscriptionFeeUSD Updated", _subscriptionFeeUSD);
+        emit SubscriptionFeeUSDUpdated(_subscriptionFeeUSD);
     }
 
-    // @notice Function to update subscription time period
+    // @notice Function to update subscription time period.
+    // @param _subscriptionPeriod The new subscription period in days.
     function updateSubscriptionPeriod(uint256 _subscriptionPeriod) external onlyOwner{
         subscriptionPeriod = _subscriptionPeriod;
         
-       emit SubscriptionPeriodUpdated("Subscription Period Updated", _subscriptionPeriod);
+       emit SubscriptionPeriodUpdated(_subscriptionPeriod);
     }
 
-    // @notice Function to update coldwallet
+    // @notice Function to update coldwallet.
+    // @param _coldWallet New address of the cold wallet, which should be a valid Ethereum address.
     function updateColdWallet(address _coldWallet) external onlyOwner {
+        if(_coldWallet == address(0)) {
+            revert ColdWalletCannotBeZeroAddress();
+        }
+
         coldWallet = _coldWallet;
 
         emit ColdWalletUpdated(_coldWallet);
     }
 
-    // @notice Function to withdraw funds
+    // @notice Function to withdraw funds.
+    // @param _token The address of the token to be withdrawn.
+    // If the address is `0`, it indicates the native currency i.e. Ether. 
+    // Otherwise, it specifies the address of an ERC-20 token contract.
     function withdraw(address _token) external onlyOwner {
         uint256 balance;
         if (_token == address(0)) {
