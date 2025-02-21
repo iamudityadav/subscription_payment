@@ -12,31 +12,21 @@ contract DeployScript is Script {
 
         vm.startBroadcast(deployerKey);
 
-        uint256 subscriptionFeeUSD = 200;
-        uint256 subscriptionPeriod = 90;
         address owner =  deployer;
         address coldWallet = deployer;
-        address bnb;
-        address usdc;
-        address usdt;
-        address wbtc;
-        address priceFeedBNBUSD;
-        address priceFeedETHUSD;
-        address priceFeedWBTCUSD;
+        address bnb = 0x871ACbEabBaf8Bed65c22ba7132beCFaBf8c27B5;
+        address usdc = 0x2B0974b96511a728CA6342597471366D3444Aa2a;
+        address usdt= 0xA1d7f71cbBb361A77820279958BAC38fC3667c1a;
+        address wbtc = 0xD0684a311F47AD7fdFf03951d7b91996Be9326E1;
 
         // Deploying SubscriptionPayment contract
         SubscriptionPayment subscriptionPayment = new SubscriptionPayment(
-            subscriptionFeeUSD,
-            subscriptionPeriod,
             owner, 
             coldWallet, 
             bnb, 
             usdc, 
             usdt, 
-            wbtc,
-            priceFeedBNBUSD,
-            priceFeedETHUSD,
-            priceFeedWBTCUSD
+            wbtc
         );
         console.log("SubscriptionPayment deployed at: ", address(subscriptionPayment));
 
